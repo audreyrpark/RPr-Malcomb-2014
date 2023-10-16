@@ -740,7 +740,7 @@ We had to make many assumptions about calculating individual components, e.g. ab
 Rescaling to a quintile rank as described in the original study is unclear, especially considering the number of discrete or even binary inputs.
 We have made a judgement call to do this by calculating percent rank and multiplying by 4, producing a theoretical domain of 0 to 4 similar to that of quintiles.
 
-```{r rescale-capacity-vars}
+```{r rescale-capacity-vars, EVAL = FALSE}
 hh_capacity_t <- hh_capacity_t  %>%
   # sum livestock, including HH with some missing values
   rowwise() %>%
@@ -776,7 +776,7 @@ Calculate household-level adaptive capacity scores based on original study Table
 The indicators have already been rescaled to a possible domain of `0` to `4`, and the weights sum to `0.4`, giving a possible domain of
 adaptive capacity scores from `0.0` to `1.6`.
 
-```{r hh-capacity}
+```{r hh-capacity, EVAL = FALSE}
 hh_capacity_t <- mutate(hh_capacity_t, capacity = 
                         0.04 * livestock +
                         0.03 * sick +
@@ -797,7 +797,7 @@ head(hh_capacity_t[,c(33,21:32)])
 
 Summary statistics of adaptive capacity and its components at the household level.
 
-```{r hh-capacity-summary}
+```{r hh-capacity-summary, EVAL = FALSE}
 hh_stats <- stat.desc(hh_capacity_t[,c(33,21:32)]) %>%
   mutate_if(is.numeric, round, digits=2)
 hh_stats[-c(1:3, 7, 10:12, 14),] %>% t() %>% kable() # brackets remove unnecessary statistics from output
@@ -810,7 +810,7 @@ Aggregate household adaptive capacity scores to traditional authorities.
 The original paper found adaptive capacity scores for 203 TAs, of which we found 6 TAs were conservation areas, leaving 197 meaningful TA scores.
 We created an additional 9 TAs from errors from three features on Lake Malawi, so if the original authors did not notice those errors, we could expect scores for 206 TAs.
 
-```{r aggregate-capacity-to-tas}
+```{r aggregate-capacity-to-tas, EVAL = FALSE}
 ta_capacity_t <- hh_capacity_t %>% 
   group_by(ta_id) %>%
   summarize(
@@ -837,11 +837,11 @@ ta_capacity_t <- hh_capacity_t %>%
 Now that household adaptive capacity data has been aggregated, they may be saved to the `data\derived\public`
 directory.
 
-```{r save-TA-adaptive-capacity}
+```{r save-TA-adaptive-capacity, EVAL = FALSE}
 ta_capacity_t %>% saveRDS(here(public_d, "adaptive_capacity.RDS"))
 rm(list=c("dhsclusters", "dhshh", "cluster_ta", "hh_capacity_t", "ta_capacity_t"))
 ```
-
+CAN RUN HERE
 Load aggregated public adaptive capacity data.
 
 ```{r load-TA-adaptive-capacity}
@@ -852,7 +852,7 @@ head(ta_capacity_t)
 
 Count TAs with adaptive capacity data.
 
-```{r count-tas}
+```{r count-tas, EVAL = FALSE}
 paste(nrow(ta_capacity_t),
       "TAs have adaptive capacity data") %>% noquote()
 ```
@@ -912,7 +912,7 @@ ta_v %>% st_drop_geometry() %>% count(rpac_class) %>% kable()
 
 Map reproduction results for comparison to figure 4.
 
-```{r reproduction-figure-4-map, message = F}
+```{r reproduction-figure-4-map, message = F, EVAL = FALSE}
 tmap_mode("plot")
 tm_shape(lakes_v, bbox="Malawi") +
   tm_fill(col="lightblue") +
@@ -1250,7 +1250,7 @@ sensitivity_r = st_rasterize(lhz_v[,'sensitivity'], blank)
 plot(sensitivity_r)
 ```
 
-### Vulnerability score
+### Additive Vulnerability score
 
 Calculate an aggregated vulnerability score by adding low adaptive capacity (invert adaptive capacity by subtracting from the maximum score of 40), livelihood sensitivity, drought exposure, and flood risk.
 
@@ -1270,7 +1270,6 @@ plot(vulnerability_r)
 vuln_max <- max(vulnerability_r[[1]],na.rm = TRUE)
 vuln_min <- min(vulnerability_r[[1]],na.rm = TRUE)
 ```
-
 ### Reproduction figure 5
 
 ```{r vulnerability-map}
@@ -1296,6 +1295,47 @@ vuln_map = ggplot() +
 vuln_map
 ```
 
+### Multiplicative Vulnerability Score
+$$
+VulnerabilityM = (40 - Adaptive  = ) + Livelihood Sensitivity + (Drought Exposure * Flood Risk)
+$$
+```{r combined-vulnerability-M}
+# final output (adding component rasters)
+vulnerability_r_M <- (40 - capacity_r) * sensitivity_r * (drought_r + flood_r) 
+# 100 = highest vulnerability, 0 = lowest vulnerability
+names(vulnerability_r_M) <- "vulnerabilityM"
+plot(vulnerability_r_M)
+```
+
+```{r find break & limit values for vulnerability map-M}
+vuln_max_M <- max(vulnerability_r_M[[1]],na.rm = TRUE)
+vuln_min_M <- min(vulnerability_r_M[[1]],na.rm = TRUE)
+```
+
+
+### Figure 5 Multiplicative
+```{r vulnerability-map-M}
+vuln_map_M = ggplot() +
+  geom_stars(data = vulnerability_r_M) +
+  scale_fill_gradient(
+    low = "#FFFF75",
+    high = "#CF4611",
+    breaks = c(vuln_min_M, vuln_max_M),
+    labels = c("Lower Vulnerability", "Higher Vulnerability"),
+    na.value = "transparent",
+    guide = "colourbar",
+    limits = c(vuln_min_M, vuln_max_M)
+  ) +
+  labs(title = "Malawi Vulnerability to Climate Change with Multiplicative Score") +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  ) +   coord_quickmap()
+
+vuln_map_M
+```
 ```{r saving spatial data outputs}
 write_stars(capacity_r, here("data","derived","public","ta_capacity.tif"))
 
